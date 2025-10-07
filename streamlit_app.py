@@ -14,7 +14,6 @@ import plotly.figure_factory as ff
 # Page configuration
 st.set_page_config(
     page_title="Quantum Imaging Overlap Analysis",
-    page_icon="🔬",
     layout="wide",
     initial_sidebar_state="expanded"
 )
@@ -44,11 +43,11 @@ st.markdown("""
 """, unsafe_allow_html=True)
 
 # Title
-st.markdown('<h1 class="main-header">🔬 Quantum Imaging Overlap Analysis</h1>', unsafe_allow_html=True)
-st.markdown("Analysis of mechanical and optical mode overlaps with rotation capabilities")
+st.markdown('<h1 class="main-header"> Quantum Imaging Overlap Analysis</h1>', unsafe_allow_html=True)
+st.markdown("Analysis of mechanical and optical mode overlaps ")
 
 # Add tab selection
-tab1, tab2 = st.tabs(["📊 Matplotlib Analysis", "🎯 Plotly Analysis"])
+tab1, tab2 = st.tabs(["Matplotlib Analysis", "Plotly Analysis"])
 
 with tab1:
     # Core Functions
@@ -119,7 +118,7 @@ with tab1:
         return im
 
     # Sidebar controls
-    st.sidebar.markdown("## 🔧 Parameters")
+    st.sidebar.markdown("## Parameters")
 
     # Grid parameters
     st.sidebar.markdown("### Grid Settings")
@@ -140,7 +139,7 @@ with tab1:
     st.sidebar.markdown("#### Illumination Parameters")
     illumination_mode = st.sidebar.radio(
         "Choose parameter type:",
-        ["Sigma (σx, σy)", "Optical Waist (wx, wy)"],
+        ["Optical Waist (wx, wy)", "Sigma (σx, σy)"],
         help="Sigma: Direct Gaussian width parameter\nOptical Waist: Beam waist for exp(-x²/w²), converted as σ = w/√2"
     )
 
@@ -149,11 +148,11 @@ with tab1:
         sigma_y = st.sidebar.number_input("σy (mm)", min_value=0.001, max_value=1.0, value=0.028, step=0.001, format="%.3f")
         
         # Calculate and display optical waist values
-        wx = sigma_x * np.sqrt(2)
-        wy = sigma_y * np.sqrt(2)
+        wx = sigma_x * np.sqrt(2)*1000
+        wy = sigma_y * np.sqrt(2)*1000
         st.sidebar.markdown(f"**Corresponding optical waist:**")
-        st.sidebar.markdown(f"wx = {wx:.3f} mm")
-        st.sidebar.markdown(f"wy = {wy:.3f} mm")
+        st.sidebar.markdown(f"wx = {wx:.3f} um")
+        st.sidebar.markdown(f"wy = {wy:.3f} um")
         
     else:  # Optical Waist mode
         wx = st.sidebar.number_input("wx (um)", min_value=10, max_value=500, value=40, step=1)/1000
@@ -226,10 +225,7 @@ with tab1:
         else:
             x1, y1, x2, y2 = 0, 0, 0, 0  # Will be set based on cut type
 
-    # Single point analysis toggle
-    st.sidebar.markdown("### Single Point Analysis")
-    enable_single_point = st.sidebar.checkbox("Enable single point analysis", False)
-
+  
     # Main computation
     # Create grid
     x = np.linspace(-L/2, L/2, N)
@@ -253,7 +249,7 @@ with tab1:
     g_center = u_mn_c * u_00_c
 
     # Main plots - Original 3 plots only
-    st.markdown('<div class="section-header">📊 Analysis Results</div>', unsafe_allow_html=True)
+    st.markdown('<div class="section-header"> Analysis Results</div>', unsafe_allow_html=True)
 
     # Plot value type selection
     st.markdown("### Plot Value Type")
@@ -295,10 +291,10 @@ with tab1:
     plt.colorbar(im0, ax=axs[0], fraction=0.046, pad=0.04)
 
     # Kernel
-    im1 = create_plot(axs[1], g_plot, [x.min(), x.max(), y.min(), y.max()],
-                     g_title, "x [mm]", "y [mm]", colormap)
-    axs[1].set_xlim(-0.1, 0.1)
-    axs[1].set_ylim(-0.1, 0.1)
+    im1 = create_plot(axs[1], g_plot, [x.min()*1000, x.max()*1000, y.min()*1000, y.max()*1000],
+                     g_title, "x [um]", "y [um]", colormap)
+    axs[1].set_xlim(-100, 100)
+    axs[1].set_ylim(-100, 100)
     plt.colorbar(im1, ax=axs[1], fraction=0.046, pad=0.04)
 
     # Overlap map
@@ -313,7 +309,7 @@ with tab1:
 
     # Cut analysis
     if enable_cuts:
-        st.markdown('<div class="section-header">✂️ Cut Analysis</div>', unsafe_allow_html=True)
+        st.markdown('<div class="section-header"> Cut Analysis</div>', unsafe_allow_html=True)
         
         # Determine cut points based on type
         if cut_type == "Diagonal":
@@ -355,17 +351,67 @@ with tab1:
             key="cut_plot_type"
         )
         
+        rotation_overlap_map = st.number_input("Rotation angle of overlap map (degrees)", min_value=-180.0, max_value=180.0, value=45.0, step=1.0, format="%.1f")
+        
+        # Create rotated overlap map with proper rescaling for arbitrary angles
+        # Rotate the overlap map by rotation_overlap_map degrees
+        rotated_Omap = rotate(Omap, rotation_overlap_map, reshape=True, order=1, mode='constant', cval=0)
+        
+        # Calculate the bounding box of the rotated square
+        # For a square of side L, after rotation by angle θ, the bounding box dimensions are:
+        # width = L * (|cos(θ)| + |sin(θ)|)
+        # height = L * (|cos(θ)| + |sin(θ)|)
+        angle_rad = np.radians(rotation_overlap_map)
+        cos_angle = abs(np.cos(angle_rad))
+        sin_angle = abs(np.sin(angle_rad))
+        
+        # Bounding box dimensions for the rotated square
+        bbox_size = L * (cos_angle + sin_angle)
+        
+        # Create coordinate arrays for the rotated data
+        # The rotated grid size depends on the rotation angle
+        max_coord = bbox_size / 2
+        x_rot = np.linspace(-max_coord, max_coord, rotated_Omap.shape[1])
+        y_rot = np.linspace(-max_coord, max_coord, rotated_Omap.shape[0])
+        
+        # Create a mask for the original square membrane in the rotated coordinates
+        # We need to transform the original square boundary to the rotated coordinate system
+        center_x, center_y = 0, 0  # Center of the original square
+        
+        # Create coordinate grids for the rotated system
+        X_rot, Y_rot = np.meshgrid(x_rot, y_rot, indexing='xy')
+        
+        # Transform back to original coordinates to check if points are within the original square
+        cos_angle_back = np.cos(-angle_rad)
+        sin_angle_back = np.sin(-angle_rad)
+        
+        # Inverse rotation to check if points are within the original square
+        x_orig = (X_rot - center_x) * cos_angle_back - (Y_rot - center_y) * sin_angle_back
+        y_orig = (X_rot - center_x) * sin_angle_back + (Y_rot - center_y) * cos_angle_back
+        
+        # Create mask for points within the original square boundary
+        square_mask = (np.abs(x_orig) <= L/2) & (np.abs(y_orig) <= L/2)
+        
+        # Apply mask to set everything outside the original square to zero
+        rotated_Omap_masked = rotated_Omap.copy()
+        rotated_Omap_masked[~square_mask] = 0
+        
         # Apply transformation based on selection
         if cut_plot_type == "Absolute Values":
             cut_plot_data = np.abs(cut_data)
             cut_ylabel = "|Overlap|"
+            Omap_export = np.abs(Omap)
+            rotated_Omap_masked = np.abs(rotated_Omap_masked)
+
         else:  # Magnitude Squared
             cut_plot_data = np.abs(cut_data)**2
             cut_ylabel = "|Overlap|²"
-        
+            Omap_export = np.abs(Omap)**2
+            rotated_Omap_masked = np.abs(rotated_Omap_masked)**2
+
         # Create two-column layout for cut analysis
-        col1, col2 = st.columns([1, 1])
-        
+        col1, col2, col3 = st.columns([1, 1, 1])
+
         with col1:
             # Plot cut - Single plot for real values only
             fig_cut, ax_cut = plt.subplots(1, 1, figsize=(6, 4))
@@ -384,7 +430,7 @@ with tab1:
             fig_map, ax_map = plt.subplots(1, 1, figsize=(6, 4))
             
             # Plot overlap map
-            im_map = ax_map.imshow(np.abs(Omap), extent=[x.min(), x.max(), y.min(), y.max()],
+            im_map = ax_map.imshow(Omap_export, extent=[x.min(), x.max(), y.min(), y.max()],
                                   origin='lower', cmap=colormap)
             ax_map.set_title(f"Cut Path on Overlap Map")
             ax_map.set_xlabel("$x_0$ [mm]")
@@ -406,24 +452,46 @@ with tab1:
             plt.colorbar(im_map, ax=ax_map, fraction=0.046, pad=0.04)
             plt.tight_layout()
             st.pyplot(fig_map)
-        
+        with col3:
+            # Create matplotlib figure for the rotated overlap map
+            fig_rotated, ax_rotated = plt.subplots(1, 1, figsize=(6, 4))
+            
+            # Plot the rotated and masked overlap map
+            im_rotated = ax_rotated.imshow(rotated_Omap_masked, 
+                                        extent=[x_rot.min(), x_rot.max(), y_rot.min(), y_rot.max()],
+                                        origin='lower', cmap=colormap)
+            
+            ax_rotated.set_title(f"{rotation_overlap_map}° Rotated Overlap Map")
+            ax_rotated.set_xlabel("x [mm]")
+            ax_rotated.set_ylabel("y [mm]")
+            ax_rotated.set_aspect('equal')
+            
+            # Add colorbar
+            plt.colorbar(im_rotated, ax=ax_rotated, fraction=0.046, pad=0.04)
+            
+            plt.tight_layout()
+            
+            # Display the rotated map
+            st.pyplot(fig_rotated)
+            
+                # Export the rotated data as CSV
         # Data export section
-        st.markdown("### 📁 Data Export")
+        st.markdown("### Data Export")
         
-        # Create two columns for filename input and export button
-        col_export1, col_export2 = st.columns([2, 1])
+        # Create columns and rows for different export options
+        export_1_1, export_1_2, export_2_1, export_2_2 = st.columns([1, 1, 1, 1])
         
-        with col_export1:
+        with export_1_1:
             # Default filename based on cut type and parameters
             default_filename = f"overlap_cut_{cut_type.lower()}_m{m}n{n}_rot{rotation_angle:.0f}"
             csv_filename = st.text_input("CSV filename (without .csv extension)", 
                                        value=default_filename,
                                        help="Enter a custom filename for the CSV export")
         
-        with col_export2:
+        with export_1_2:
             st.markdown("")  # Add some spacing
             st.markdown("")  # Add some spacing
-            if st.button("📥 Export Cut Data", type="primary"):
+            if st.button(" Export Cut Data", type="secondary"):
                 # Ensure filename has .csv extension
                 if not csv_filename.endswith('.csv'):
                     csv_filename += '.csv'
@@ -439,32 +507,87 @@ with tab1:
                 
                 # Download button
                 st.download_button(
-                    label="⬇️ Download CSV",
+                    label=" Download CSV",
                     data=csv,
                     file_name=csv_filename,
                     mime="text/csv"
                 )
                 
                 # Show success message
-                st.success(f"✅ Data exported as {csv_filename}")
-
-    # Single point analysis
-    if enable_single_point:
-        st.markdown('<div class="section-header">📍 Single Point Analysis</div>', unsafe_allow_html=True)
-
-        col1, col2 = st.columns(2)
-        with col1:
-            x0_test = st.number_input("Test point X (mm)", value=0.5, step=0.01, format="%.3f")
-        with col2:
-            y0_test = st.number_input("Test point Y (mm)", value=-0.3, step=0.01, format="%.3f")
-
-        if st.button("Calculate Overlap"):
-            O_single = overlap_at_offset(x0_test, y0_test, m, n, sigma_x, sigma_y, 
-                                        phi, X, Y, dx, dy, rotation_angle, rel_strength)
-            
-            st.success(f"Overlap at ({x0_test:.3f}, {y0_test:.3f}) mm:")
-            st.write(f"**Real value:** {O_single:.6e}")
-
+                st.success(f" Data exported as {csv_filename}")
+        
+        with export_2_1:
+            # Default filename based on cut type and parameters
+            default_filename_1 = f"overlap_2d_rotated_{cut_type.lower()}_m{m}n{n}_rot{rotation_overlap_map:.0f}"
+            csv_filename_1 = st.text_input("CSV filename (without .csv extension)", 
+                                       value=default_filename_1,
+                                       help="Enter a custom filename for the CSV export")
+        with export_2_2:
+            st.markdown("")  # Add some spacing
+            st.markdown("")  # Add some spacing
+            if st.button(" Export 2D Rotated Map", type="secondary"):
+                # Ensure filename has .csv extension
+                if not csv_filename_1.endswith('.csv'):
+                    csv_filename_1 += '.csv'
+                
+                # Export the rotated data as two separate CSV files
+                # Create coordinate meshgrids for export using the proper coordinate system
+                X_rot_export, Y_rot_export = np.meshgrid(x_rot, y_rot, indexing='xy')
+                
+                # Create flattened data for first CSV
+                export_data = {
+                    'x_mm': X_rot_export.flatten(),
+                    'y_mm': Y_rot_export.flatten(),
+                    'overlap_real': rotated_Omap_masked.flatten()
+                }
+                
+                # Create DataFrame for flattened data
+                flattened_df = pd.DataFrame(export_data)
+                flattened_csv = flattened_df.to_csv(index=False)
+                
+                # Create 2D array data for second CSV
+                array_df = pd.DataFrame(rotated_Omap_masked)
+                array_df.columns = [f"x_{i:.3f}" for i in x_rot]  # Column headers with x coordinates
+                array_df.index = [f"y_{i:.3f}" for i in y_rot]    # Row headers with y coordinates
+                array_csv = array_df.to_csv()
+                
+                # Create filenames for both files
+                base_filename = csv_filename_1.replace('.csv', '')
+                flattened_filename = f"{base_filename}_flattened.csv"
+                array_filename = f"{base_filename}_2d_array.csv"
+                
+                # Create two columns for the download buttons
+                col_download1, col_download2 = st.columns(2)
+                
+                with col_download1:
+                    # Download button for flattened data
+                    st.download_button(
+                        label="Download Flattened Data",
+                        data=flattened_csv,
+                        file_name=flattened_filename,
+                        mime="text/csv",
+                        help="CSV with x, y coordinates and overlap values"
+                    )
+                
+                with col_download2:
+                    # Download button for 2D array data
+                    st.download_button(
+                        label="Download 2D Array Data",
+                        data=array_csv,
+                        file_name=array_filename,
+                        mime="text/csv",
+                        help="CSV with 2D array format for matrix operations"
+                    )
+                
+                # Show success message
+                st.success(f" Data exported as {flattened_filename} and {array_filename}")
+                
+                # Display preview of the data structure
+                st.markdown("**Data Structure:**")
+                st.markdown(f"- **Flattened data**: {len(export_data['x_mm'])} points with coordinates and overlap values")
+                st.markdown(f"- **2D Array data**: {rotated_Omap_masked.shape[0]} × {rotated_Omap_masked.shape[1]} matrix")
+                st.markdown(f"- **Coordinate ranges**: x ∈ [{x_rot.min():.3f}, {x_rot.max():.3f}] mm, y ∈ [{y_rot.min():.3f}, {y_rot.max():.3f}] mm")
+    
     # Footer
     st.markdown("---")
     st.markdown("**Quantum Imaging Overlap Analysis Tool** - Analysis of mechanical and optical mode overlaps")
