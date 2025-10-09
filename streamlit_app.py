@@ -52,9 +52,9 @@ tab1, tab2 = st.tabs(["Matplotlib Analysis", "Plotly Analysis"])
 with tab1:
     # Core Functions
     @st.cache_data
-    def drum_mode_square(x, y, L, kx=1, ky=1):
+    def drum_mode_square(x, y, L, beta, kx=1, ky=1):
         """Square membrane mechanical modes"""
-        return np.sin(np.pi * kx * (x + L/2)/L) * np.sin(np.pi * ky * (y + L/2)/L)
+        return np.sin(np.pi * kx * (x + L/2)/L) * np.sin(np.pi * ky * (y + L/2)/L) + beta * np.sin(np.pi * kx * (y + L/2)/L) * np.sin(np.pi * ky * (x + L/2)/L)
 
     @st.cache_data
     def HG_1D(x, n, sigma):
@@ -127,6 +127,7 @@ with tab1:
 
     # Mechanical mode parameters
     st.sidebar.markdown("### Mechanical Mode")
+    beta = st.sidebar.number_input("beta", min_value=-1.0, max_value=1.0, value=0.0, step=0.01, format="%.2f", help="Skewness of mechanical mode; sin(k_x * x) sin(k_y * y) + beta * sin(k_x * y) sin(k_x * x)")
     kx_mech = st.sidebar.number_input("kx", min_value=1, max_value=10, value=2, step=1)
     ky_mech = st.sidebar.number_input("ky", min_value=1, max_value=10, value=1, step=1)
 
@@ -155,8 +156,8 @@ with tab1:
         st.sidebar.markdown(f"wy = {wy:.3f} um")
         
     else:  # Optical Waist mode
-        wx = st.sidebar.number_input("wx (um)", min_value=10, max_value=500, value=40, step=1)/1000
-        wy = st.sidebar.number_input("wy (um)", min_value=10, max_value=500, value=40, step=1)/1000
+        wx = st.sidebar.number_input("wx (um)", min_value=10, max_value=5000, value=40, step=1)/1000
+        wy = st.sidebar.number_input("wy (um)", min_value=10, max_value=5000, value=40, step=1)/1000
         
         # Convert to sigma values
         sigma_x = wx / np.sqrt(2)
@@ -238,7 +239,7 @@ with tab1:
     A = np.ones_like(X)
 
     # Mechanical mode
-    phi = drum_mode_square(X, Y, L, kx_mech, ky_mech) * A
+    phi = drum_mode_square(X, Y, L, beta, kx_mech, ky_mech) * A
 
     # Compute overlap map
     Omap = overlap_map(m, n, sigma_x, sigma_y, phi, X, Y, dx, dy, rotation_angle, rel_strength)
