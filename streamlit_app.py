@@ -52,9 +52,9 @@ tab1, tab2 = st.tabs(["Matplotlib Analysis", "Plotly Analysis"])
 with tab1:
     # Core Functions
     @st.cache_data
-    def drum_mode_square(x, y, L, beta, kx=1, ky=1):
+    def drum_mode_square(x, y, L, beta, kx1=1, ky1=1, kx2=1, ky2=1):
         """Square membrane mechanical modes"""
-        return np.sin(np.pi * kx * (x + L/2)/L) * np.sin(np.pi * ky * (y + L/2)/L) + beta * np.sin(np.pi * kx * (y + L/2)/L) * np.sin(np.pi * ky * (x + L/2)/L)
+        return np.sin(np.pi * kx1 * (x + L/2)/L) * np.sin(np.pi * ky1 * (y + L/2)/L) + beta * np.sin(np.pi * ky2 * (y + L/2)/L) * np.sin(np.pi * kx2 * (x + L/2)/L)
 
     @st.cache_data
     def HG_1D(x, n, sigma):
@@ -123,13 +123,19 @@ with tab1:
     # Grid parameters
     st.sidebar.markdown("### Grid Settings")
     L = st.sidebar.number_input("Membrane side length (mm)", min_value=0.1, max_value=20.0, value=5.0, step=0.1, format="%.1f")
+    chip_margin = st.sidebar.number_input("Background margin (mm, each side)", min_value=0.0, max_value=20.0, value=1.0, step=0.1, format="%.1f", help="Opaque background padding around the membrane. Set to 0 to use membrane-only grid.")
+    L_chip = L + 2 * chip_margin
+    if chip_margin > 0:
+        st.sidebar.markdown(f"Chip size: **{L_chip:.1f} mm × {L_chip:.1f} mm**")
     N = st.sidebar.number_input("Grid points per side", min_value=50, max_value=2000, value=500, step=50)
 
     # Mechanical mode parameters
     st.sidebar.markdown("### Mechanical Mode")
-    beta = st.sidebar.number_input("beta", min_value=-1.0, max_value=1.0, value=0.0, step=0.01, format="%.2f", help="Skewness of mechanical mode; sin(k_x * x) sin(k_y * y) + beta * sin(k_x * y) sin(k_x * x)")
-    kx_mech = st.sidebar.number_input("kx", min_value=1, max_value=10, value=2, step=1)
-    ky_mech = st.sidebar.number_input("ky", min_value=1, max_value=10, value=1, step=1)
+    beta = st.sidebar.number_input("beta", min_value=-1.0, max_value=1.0, value=0.0, step=0.01, format="%.2f", help="Skewness of mechanical mode; sin(k_x1 * x) sin(k_y1 * y) + beta * sin(k_x2 * x) sin(k_y2 * y)")
+    kx_mech1 = st.sidebar.number_input("kx1", min_value=1, max_value=10, value=2, step=1)
+    ky_mech1 = st.sidebar.number_input("ky1", min_value=1, max_value=10, value=1, step=1)
+    kx_mech2 = st.sidebar.number_input("kx2", min_value=1, max_value=10, value=2, step=1)
+    ky_mech2 = st.sidebar.number_input("ky2", min_value=1, max_value=10, value=1, step=1)
 
     # Optical mode parameters
     st.sidebar.markdown("### Optical Mode")
@@ -187,38 +193,38 @@ with tab1:
             st.sidebar.markdown("**Custom Cut Points**")
             
             # Top: x2 horizontal slider
-            x2 = st.sidebar.slider("x_2", min_value=-L/2, max_value=L/2, value=1.0, step=0.01, format="%.2f", key="x2_slider")
-            
+            x2 = st.sidebar.slider("x_2", min_value=-L_chip/2, max_value=L_chip/2, value=1.0, step=0.01, format="%.2f", key="x2_slider")
+
             # Create three columns for left, center, right
             col_left, col_center, col_right = st.sidebar.columns([1, 2, 1])
-            
+
             with col_left:
                 # Left: y1 vertical slider
                 st.markdown("**y_1**")
-                y1 = svs.vertical_slider(key="y1_slider", 
-                                       default_value=-1.0, 
-                                       step=0.01, 
-                                       min_value=-L/2, 
-                                       max_value=L/2,
+                y1 = svs.vertical_slider(key="y1_slider",
+                                       default_value=-1.0,
+                                       step=0.01,
+                                       min_value=-L_chip/2,
+                                       max_value=L_chip/2,
                                        slider_color='red',
                                        track_color='lightgray',
                                        thumb_color='red')
-            
-            
+
+
             with col_right:
                 # Right: y2 vertical slider
                 st.markdown("**y_2**")
-                y2 = svs.vertical_slider(key="y2_slider", 
-                                       default_value=1.0, 
-                                       step=0.01, 
-                                       min_value=-L/2, 
-                                       max_value=L/2,
+                y2 = svs.vertical_slider(key="y2_slider",
+                                       default_value=1.0,
+                                       step=0.01,
+                                       min_value=-L_chip/2,
+                                       max_value=L_chip/2,
                                        slider_color='red',
                                        track_color='lightgray',
                                        thumb_color='red')
-            
+
             # Bottom: x1 horizontal slider
-            x1 = st.sidebar.slider("x_1", min_value=-L/2, max_value=L/2, value=-1.0, step=0.01, format="%.2f", key="x1_slider")
+            x1 = st.sidebar.slider("x_1", min_value=-L_chip/2, max_value=L_chip/2, value=-1.0, step=0.01, format="%.2f", key="x1_slider")
             
             # Display complete point information after all sliders are defined
             st.sidebar.markdown(f"**Point 1:** ({x1:.2f}, {y1:.2f})")
@@ -228,18 +234,18 @@ with tab1:
 
   
     # Main computation
-    # Create grid
-    x = np.linspace(-L/2, L/2, N)
-    y = np.linspace(-L/2, L/2, N)
+    # Create grid over full chip area (membrane + opaque background)
+    x = np.linspace(-L_chip/2, L_chip/2, N)
+    y = np.linspace(-L_chip/2, L_chip/2, N)
     dx = x[1] - x[0]
     dy = y[1] - y[0]
     X, Y = np.meshgrid(x, y, indexing='xy')
 
-    # Square aperture
-    A = np.ones_like(X)
+    # Membrane aperture: 1 inside the membrane, 0 on the opaque background
+    A = ((np.abs(X) <= L/2) & (np.abs(Y) <= L/2)).astype(float)
 
     # Mechanical mode
-    phi = drum_mode_square(X, Y, L, beta, kx_mech, ky_mech) * A
+    phi = drum_mode_square(X, Y, L, beta, kx_mech1, ky_mech1, kx_mech2, ky_mech2) * A
 
     # Compute overlap map
     Omap = overlap_map(m, n, sigma_x, sigma_y, phi, X, Y, dx, dy, rotation_angle, rel_strength)
@@ -266,21 +272,21 @@ with tab1:
         phi_plot = phi
         g_plot = g_center
         O_plot = Omap
-        phi_title = f"Mechanical mode $\phi$_{kx_mech}{ky_mech}"
+        phi_title = rf"Mechanical mode $\phi_{{{kx_mech1}{ky_mech1}}}+\beta\phi_{{{kx_mech2}{ky_mech2}}}$"
         g_title = f"Kernel g_{m}{n}(x,y) = u_{m}{n} u_00"
         O_title = r"Overlap map $\mathcal{O}_{mn}(x_0,y_0)$"
     elif plot_type == "Absolute Values":
         phi_plot = np.abs(phi)
         g_plot = np.abs(g_center)
         O_plot = np.abs(Omap)
-        phi_title = f"Mechanical mode $|\phi$_{kx_mech}{ky_mech}|"
+        phi_title = rf"Mechanical mode |$\phi_{{{kx_mech1}{ky_mech1}}}+\beta\phi_{{{kx_mech2}{ky_mech2}}}$|"
         g_title = f"Kernel |g_{m}{n}(x,y) = u_{m}{n} u_00| "
         O_title = r"Overlap map |$\mathcal{O}_{mn}(x_0,y_0)|$ "
     else:  # Magnitude Squared
         phi_plot = np.abs(phi)**2
         g_plot = np.abs(g_center)**2
         O_plot = np.abs(Omap)**2
-        phi_title = f"Mechanical mode $|\phi$_{kx_mech}{ky_mech}|²"
+        phi_title = rf"Mechanical mode |$\phi_{{{kx_mech1}{ky_mech1}}}+\beta\phi_{{{kx_mech2}{ky_mech2}}}$|²"
         g_title = f"Kernel |g_{m}{n}(x,y) = u_{m}{n} u_00|²"
         O_title = r"Overlap map |$\mathcal{O}_{mn}(x_0,y_0)|^2$"
 
@@ -289,6 +295,8 @@ with tab1:
     # Mechanical mode
     im0 = create_plot(axs[0], phi_plot, [x.min(), x.max(), y.min(), y.max()],
                      phi_title, "x [mm]", "y [mm]", colormap)
+    if chip_margin > 0:
+        axs[0].add_patch(plt.Rectangle((-L/2, -L/2), L, L, fill=False, edgecolor='white', linewidth=1.5, linestyle='--'))
     plt.colorbar(im0, ax=axs[0], fraction=0.046, pad=0.04)
 
     # Kernel
@@ -301,6 +309,8 @@ with tab1:
     # Overlap map
     im2 = create_plot(axs[2], O_plot, [x.min(), x.max(), y.min(), y.max()],
                      O_title, "$x_0$ [mm]", "$y_0$ [mm]", colormap)
+    if chip_margin > 0:
+        axs[2].add_patch(plt.Rectangle((-L/2, -L/2), L, L, fill=False, edgecolor='white', linewidth=1.5, linestyle='--'))
     if show_contours:
         axs[2].contour(x, y, O_plot, levels=contour_levels, linewidths=0.7, colors='white', alpha=0.7)
     plt.colorbar(im2, ax=axs[2], fraction=0.046, pad=0.04)
@@ -314,8 +324,8 @@ with tab1:
         
         # Determine cut points based on type
         if cut_type == "Diagonal":
-            x1, y1 = -L/2, -L/2
-            x2, y2 = L/2, L/2
+            x1, y1 = -L_chip/2, -L_chip/2
+            x2, y2 = L_chip/2, L_chip/2
 
         
         # Create cut
@@ -401,12 +411,14 @@ with tab1:
         if cut_plot_type == "Absolute Values":
             cut_plot_data = np.abs(cut_data)
             cut_ylabel = "|Overlap|"
+            rotated_Omap_title = "|$\mathcal{O}_{mn}(x_0,y_0)|$"
             Omap_export = np.abs(Omap)
             rotated_Omap_masked = np.abs(rotated_Omap_masked)
 
         else:  # Magnitude Squared
             cut_plot_data = np.abs(cut_data)**2
             cut_ylabel = "|Overlap|²"
+            rotated_Omap_title = "|$\mathcal{O}_{mn}(x_0,y_0)|^2$"
             Omap_export = np.abs(Omap)**2
             rotated_Omap_masked = np.abs(rotated_Omap_masked)**2
 
@@ -462,9 +474,9 @@ with tab1:
                                         extent=[x_rot.min(), x_rot.max(), y_rot.min(), y_rot.max()],
                                         origin='lower', cmap=colormap)
             
-            ax_rotated.set_title(f"{rotation_overlap_map}° Rotated Overlap Map")
-            ax_rotated.set_xlabel("x [mm]")
-            ax_rotated.set_ylabel("y [mm]")
+            ax_rotated.set_title(rotated_Omap_title)
+            ax_rotated.set_xlabel("$x_0$ [mm]")
+            ax_rotated.set_ylabel("$y_0$ [mm]")
             ax_rotated.set_aspect('equal')
             
             # Add colorbar
@@ -621,21 +633,21 @@ with tab2:
         phi_plot = phi
         g_plot = g_center
         O_plot = Omap
-        phi_title = f"Mechanical mode $\phi$_{kx_mech}{ky_mech}"
+        phi_title = rf"Mechanical mode $\phi_{{{kx_mech1}{ky_mech1}}}+\beta\phi_{{{kx_mech2}{ky_mech2}}}$"
         g_title = f"Kernel g_{m}{n}(x,y) = u_{m}{n} u_00"
         O_title = r"Overlap map $\mathcal{O}_{mn}(x_0,y_0)$"
     elif plotly_plot_type == "Absolute Values":
         phi_plot = np.abs(phi)
         g_plot = np.abs(g_center)
         O_plot = np.abs(Omap)
-        phi_title = f"Mechanical mode $|\phi$_{kx_mech}{ky_mech}|"
+        phi_title = rf"Mechanical mode |$\phi_{{{kx_mech1}{ky_mech1}}}+\beta\phi_{{{kx_mech2}{ky_mech2}}}$|"
         g_title = f"Kernel |g_{m}{n}(x,y) = u_{m}{n} u_00|"
         O_title = r"Overlap map |$\mathcal{O}_{mn}(x_0,y_0)|$"
     else:  # Magnitude Squared
         phi_plot = np.abs(phi)**2
         g_plot = np.abs(g_center)**2
         O_plot = np.abs(Omap)**2
-        phi_title = f"Mechanical mode $|\phi$_{kx_mech}{ky_mech}|²"
+        phi_title = rf"Mechanical mode |$\phi_{{{kx_mech1}{ky_mech1}}}+\beta\phi_{{{kx_mech2}{ky_mech2}}}$|²"
         g_title = f"Kernel |g_{m}{n}(x,y) = u_{m}{n} u_00|²"
         O_title = r"Overlap map |$\mathcal{O}_{mn}(x_0,y_0)|^2$"
 
