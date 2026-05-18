@@ -131,7 +131,9 @@ else:
     sigma_y = wy / np.sqrt(2)
     st.sidebar.markdown(f"Corresponding sigma: σx = {sigma_x:.3f} mm, σy = {sigma_y:.3f} mm")
 
-rotation_angle = st.sidebar.number_input("Rotation angle (degrees)", min_value=-180.0, max_value=180.0, value=0.0, step=1.0, format="%.1f")
+scene_angle = st.sidebar.number_input("Scene rotation angle (degrees)", min_value=-180.0, max_value=180.0, value=0.0, step=1.0, format="%.1f")
+rotation_angle = st.sidebar.number_input("Illumination angle (degrees) | wrt scene", min_value=-180.0, max_value=180.0, value=0.0, step=1.0, format="%.1f")
+effective_rotation = scene_angle + rotation_angle
 rel_strength = st.sidebar.number_input("Relative strength", min_value=0.01, max_value=10.0, value=1.0, step=0.01, format="%.2f")
 
 st.sidebar.markdown("### Visualization")
@@ -174,6 +176,15 @@ x, y, X, Y, phi, g_center, Omap = compute_scene(
     m, n, sigma_x, sigma_y, rotation_angle, rel_strength
 )
 
+def rotate_scene(arr, angle, L_chip):
+    angle_rad = np.radians(angle)
+    rotated = rotate(arr, angle, reshape=True, order=1, mode='constant', cval=0)
+    half = L_chip * (abs(np.cos(angle_rad)) + abs(np.sin(angle_rad))) / 2
+    x_new = np.linspace(-half, half, rotated.shape[1])
+    y_new = np.linspace(-half, half, rotated.shape[0])
+    return rotated, x_new, y_new
+
+
 tab1, tab2 = st.tabs(["Matplotlib Analysis", "Plotly Analysis"])
 
 # ===== TAB 1: MATPLOTLIB =====
@@ -187,31 +198,38 @@ with tab1:
         phi, g_center, Omap, plot_type, kx_mech1, ky_mech1, kx_mech2, ky_mech2, m, n
     )
 
+    phi_r, x_phi, y_phi = rotate_scene(phi_plot, scene_angle, L_chip)
+    g_r, x_g, y_g = rotate_scene(g_plot, scene_angle, L_chip)
+    O_r, x_O, y_O = rotate_scene(O_plot, scene_angle, L_chip)
+
     extent_mm = [x.min(), x.max(), y.min(), y.max()]
-    extent_um = [x.min() * 1000, x.max() * 1000, y.min() * 1000, y.max() * 1000]
 
     fig, axs = plt.subplots(1, 3, figsize=(15, 5))
 
-    im0 = create_plot(axs[0], phi_plot, extent_mm, phi_title, "x [mm]", "y [mm]", colormap)
-    if chip_margin > 0:
+    ext_phi = [x_phi.min(), x_phi.max(), y_phi.min(), y_phi.max()]
+    im0 = create_plot(axs[0], phi_r, ext_phi, phi_title, "x [mm]", "y [mm]", colormap)
+    if chip_margin > 0 and scene_angle % 90 == 0:
         axs[0].add_patch(plt.Rectangle((-L/2, -L/2), L, L, fill=False, edgecolor='white', linewidth=1.5, linestyle='--'))
     fig.colorbar(im0, ax=axs[0], fraction=0.046, pad=0.04)
 
     if illumination_mode == "Sigma (σx, σy)":
-        k_range = 5 * max(sigma_x, sigma_y)  # mm
-        im1 = create_plot(axs[1], g_plot, extent_mm, g_title, r"$x$ [mm]", r"$y$ [mm]", colormap)
+        k_range = 5 * max(sigma_x, sigma_y)
+        ext_g = [x_g.min(), x_g.max(), y_g.min(), y_g.max()]
+        im1 = create_plot(axs[1], g_r, ext_g, g_title, r"$x$ [mm]", r"$y$ [mm]", colormap)
     else:
-        k_range = 3.5 * max(wx, wy) * 1000  # μm (wx, wy are in mm)
-        im1 = create_plot(axs[1], g_plot, extent_um, g_title, r"$x$ [μm]", r"$y$ [μm]", colormap)
+        k_range = 3.5 * max(wx, wy) * 1000
+        ext_g = [x_g.min() * 1000, x_g.max() * 1000, y_g.min() * 1000, y_g.max() * 1000]
+        im1 = create_plot(axs[1], g_r, ext_g, g_title, r"$x$ [μm]", r"$y$ [μm]", colormap)
     axs[1].set_xlim(-k_range, k_range)
     axs[1].set_ylim(-k_range, k_range)
     fig.colorbar(im1, ax=axs[1], fraction=0.046, pad=0.04)
 
-    im2 = create_plot(axs[2], O_plot, extent_mm, O_title, "$x_0$ [mm]", "$y_0$ [mm]", colormap)
-    if chip_margin > 0:
+    ext_O = [x_O.min(), x_O.max(), y_O.min(), y_O.max()]
+    im2 = create_plot(axs[2], O_r, ext_O, O_title, "$x_0$ [mm]", "$y_0$ [mm]", colormap)
+    if chip_margin > 0 and scene_angle % 90 == 0:
         axs[2].add_patch(plt.Rectangle((-L/2, -L/2), L, L, fill=False, edgecolor='white', linewidth=1.5, linestyle='--'))
     if show_contours:
-        axs[2].contour(x, y, O_plot, levels=contour_levels, linewidths=0.7, colors='white', alpha=0.7)
+        axs[2].contour(x_O, y_O, O_r, levels=contour_levels, linewidths=0.7, colors='white', alpha=0.7)
     fig.colorbar(im2, ax=axs[2], fraction=0.046, pad=0.04)
 
     fig.tight_layout()
@@ -243,10 +261,7 @@ with tab1:
             rotated_Omap_title = r"$|\mathcal{O}_{mn}(x_0,y_0)|^2$"
             Omap_export = np.abs(Omap)**2
 
-        rotation_overlap_map = st.number_input(
-            "Rotation angle of overlap map (degrees)", min_value=-180.0, max_value=180.0,
-            value=45.0, step=1.0, format="%.1f"
-        )
+        rotation_overlap_map = scene_angle
 
         rotated_Omap = rotate(Omap, rotation_overlap_map, reshape=True, order=1, mode='constant', cval=0)
         angle_rad = np.radians(rotation_overlap_map)
@@ -375,17 +390,26 @@ with tab2:
         phi, g_center, Omap, plotly_plot_type, kx_mech1, ky_mech1, kx_mech2, ky_mech2, m, n
     )
 
+    phi_r, x_phi, y_phi = rotate_scene(phi_plot, scene_angle, L_chip)
+    g_r, x_g, y_g = rotate_scene(g_plot, scene_angle, L_chip)
+    O_r, x_O, y_O = rotate_scene(O_plot, scene_angle, L_chip)
+
     if show_3d:
+        X_phi, Y_phi = np.meshgrid(x_phi, y_phi, indexing='xy')
+        X_g, Y_g = np.meshgrid(x_g, y_g, indexing='xy')
+        X_O, Y_O = np.meshgrid(x_O, y_O, indexing='xy')
         scene_axes = dict(xaxis_title="x [mm]", yaxis_title="y [mm]", zaxis_title="Value")
         fig_3d = make_subplots(
             rows=1, cols=3,
             specs=[[{'type': 'surface'}, {'type': 'surface'}, {'type': 'surface'}]],
             subplot_titles=(phi_title, g_title, O_title)
         )
-        for col_idx, (data, name) in enumerate(
-            [(phi_plot, "Mechanical Mode"), (g_plot, "Kernel"), (O_plot, "Overlap Map")], 1
+        for col_idx, (data, Xc, Yc, name) in enumerate(
+            [(phi_r, X_phi, Y_phi, "Mechanical Mode"),
+             (g_r, X_g, Y_g, "Kernel"),
+             (O_r, X_O, Y_O, "Overlap Map")], 1
         ):
-            fig_3d.add_trace(go.Surface(x=X, y=Y, z=data, colorscale=colormap, name=name), row=1, col=col_idx)
+            fig_3d.add_trace(go.Surface(x=Xc, y=Yc, z=data, colorscale=colormap, name=name), row=1, col=col_idx)
         fig_3d.update_layout(
             title="3D Surface Analysis", height=600,
             scene=scene_axes, scene2=scene_axes, scene3=scene_axes
@@ -393,10 +417,12 @@ with tab2:
         st.plotly_chart(fig_3d, use_container_width=True)
     else:
         fig_2d = make_subplots(rows=1, cols=3, subplot_titles=(phi_title, g_title, O_title))
-        for col_idx, (data, name) in enumerate(
-            [(phi_plot, "Mechanical Mode"), (g_plot, "Kernel"), (O_plot, "Overlap Map")], 1
+        for col_idx, (data, xc, yc, name) in enumerate(
+            [(phi_r, x_phi, y_phi, "Mechanical Mode"),
+             (g_r, x_g, y_g, "Kernel"),
+             (O_r, x_O, y_O, "Overlap Map")], 1
         ):
-            fig_2d.add_trace(go.Heatmap(z=data, x=x, y=y, colorscale=colormap, name=name), row=1, col=col_idx)
+            fig_2d.add_trace(go.Heatmap(z=data, x=xc, y=yc, colorscale=colormap, name=name), row=1, col=col_idx)
         fig_2d.update_layout(title="2D Heatmap Analysis", height=500)
         st.plotly_chart(fig_2d, use_container_width=True)
 
@@ -405,7 +431,7 @@ with tab2:
 
     fig_cut_interactive = go.Figure()
     fig_cut_interactive.add_trace(go.Heatmap(
-        z=O_plot, x=x, y=y, colorscale=colormap,
+        z=O_r, x=x_O, y=y_O, colorscale=colormap,
         hoverongaps=False,
         hovertemplate="<b>Position:</b> (%{x:.2f}, %{y:.2f}) mm<br><b>Overlap:</b> %{z:.3e}<extra></extra>"
     ))
