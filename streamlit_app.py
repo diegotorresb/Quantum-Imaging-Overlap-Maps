@@ -133,12 +133,15 @@ else:
 
 scene_angle = st.sidebar.number_input("Scene rotation angle (degrees)", min_value=-180.0, max_value=180.0, value=0.0, step=1.0, format="%.1f")
 rotation_angle = st.sidebar.number_input("Illumination angle (degrees) | wrt scene", min_value=-180.0, max_value=180.0, value=0.0, step=1.0, format="%.1f")
-effective_rotation = scene_angle + rotation_angle
+
 rel_strength = st.sidebar.number_input("Relative strength", min_value=0.01, max_value=10.0, value=1.0, step=0.01, format="%.2f")
 
 st.sidebar.markdown("### Visualization")
 colormap = st.sidebar.selectbox("Colormap",
-    ['jet', 'viridis', 'plasma', 'inferno', 'magma', 'coolwarm', 'RdYlBu', 'seismic'])
+    ['jet', 'viridis', 'plasma', 'inferno', 'magma', 'coolwarm', 'RdYlBu', 'seismic', 'Greys', 'Purples', 'Blues', 'Greens', 'Oranges', 'Reds',
+            'YlOrBr', 'YlOrRd', 'OrRd', 'PuRd', 'RdPu', 'BuPu',
+            'GnBu', 'PuBu', 'YlGnBu', 'PuBuGn', 'BuGn', 'YlGn', 'gray', 'bone', 'pink', 'spring', 'summer', 'autumn', 'winter',
+            'cool', 'Wistia', 'hot', 'afmhot', 'gist_heat', 'copper'])
 show_contours = st.sidebar.checkbox("Show contours", False)
 contour_levels = st.sidebar.number_input("Contour levels", min_value=3, max_value=50, value=6, step=1)
 
